@@ -1,0 +1,89 @@
+let pd = import pandas
+let np = import numpy
+GeneTable.table['entrezgene_id'] = pd.to_numeric(GeneTable.table['entrezgene_id'], errors:'coerce').fillna(0).astype(np.int64).astype(str)
+let by_entrezgene_id = get_best_tss(GeneTable.table.reset_index(), groupby:'entrezgene_id')
+let by_ensembl_gene_id = get_best_tss(GeneTable.table.reset_index(), groupby:'ensembl_gene_id')
+let by_mgi_symbol = get_best_tss(GeneTable.table.reset_index(), groupby:'mgi_symbol')
+
+
+
+def join_38754(x){
+    let y = x.merge(family.platforms[0].data_table, how:'inner', left_index : True, right_index:True)
+    y['ENTREZ_GENE_ID'] = str_split(y['ENTREZ_GENE_ID'])
+    let index_generator = pd.DataFrame(y['ENTREZ_GENE_ID']).reset_index()
+    let index_generator = index_generator.merge(by_entrezgene_id.reset_index(drop:True), how:'inner', left_on : 'ENTREZ_GENE_ID', right_on : 'entrezgene_id')[
+      ['entrezgene_id', 'ensembl_gene_id', 'mgi_symbol', 'index_x']
+    ]
+    index_generator.set_index('index_x', inplace:True)
+    let x = x.merge(index_generator, left_index:True, right_index:True)
+    x.dropna(subset:['mgi_symbol'])
+    let x = x.set_index(['entrezgene_id', 'ensembl_gene_id', 'mgi_symbol'], append: True)
+    return x.groupby('mgi_symbol').mean().merge(index_generator.reset_index(), how:'inner', left_index:True, right_on:'mgi_symbol').drop_duplicates(
+      subset:['entrezgene_id']).set_index(['entrezgene_id', 'ensembl_gene_id', 'mgi_symbol', 'index_x'])
+}
+let (kidney_p7_38754, heart_p7_38754, lung_p7_38754, kidney_p28_38754, heart_p28_38754, lung_p28_38754, kidney_a_38754, lung_a_38754) = list(map(def x {return join_38754(x)}, [kidney_p7, heart_p7, lung_p7, kidney_p28, heart_p28, lung_p28, kidney_a, lung_a]))
+let p7_38754 = pd.concat([kidney_p7_38754, heart_p7_38754, lung_p7_38754], axis:1)
+let p28_38754 = pd.concat([kidney_p28_38754, heart_p28_38754, lung_p28_38754], axis:1)
+let p7_p28_d_all_38754 = multiple_t_tests(p7_38754, p28_38754)
+let p7_p28_d_heart_38754 = multiple_t_tests(heart_p7_38754, heart_p28_38754)
+let p7_p28_d_heartonly_38754 = p7_p28_d_heart_38754[p7_p28_d_all_38754 > 0.05][p7_p28_d_heart_38754 < 0.05]
+let p7_p28_d_heartall_38754 = p7_p28_d_heart_38754[p7_p28_d_all_38754 < 0.05][p7_p28_d_heart_38754 < 0.05]
+let p7_p28_d_heartonly_38754_sequences =  add_sequences(pd.DataFrame(p7_p28_d_heartonly_38754).join(by_ensembl_gene_id.set_index('ensembl_gene_id')))
+let p7_p28_d_heartonly_38754_tfs = transcription_factor_analyze(p7_p28_d_heartonly_38754_sequences, name:'p7_p28_d_heartonly_38754_tfs')
+let p7_p28_d_heartall_38754_sequences =  add_sequences(pd.DataFrame(p7_p28_d_heartall_38754).join(by_ensembl_gene_id.set_index('ensembl_gene_id')))
+let p7_p28_d_heartall_38754_tfs = transcription_factor_analyze(p7_p28_d_heartall_38754_sequences, name:'p7_p28_d_heartall_38754_tfs')
+print('finished 38754')
+
+def join_64403(x){
+    let index_generator = pd.DataFrame(x.index.to_series()).rename(columns: ('Gene':'index_x')).reset_index()
+    let index_generator = index_generator.merge(by_ensembl_gene_id.reset_index(drop:True), how:'inner', left_on : 'index_x', right_on : 'ensembl_gene_id')[
+      ['entrezgene_id', 'ensembl_gene_id', 'mgi_symbol', 'index_x']
+    ]
+    index_generator.set_index('index_x', inplace:True)
+    let x = x.merge(index_generator, left_index:True, right_index:True)
+    x.dropna(subset:['mgi_symbol'])
+    let x = x.set_index(['entrezgene_id', 'ensembl_gene_id', 'mgi_symbol'], append: True)
+    return x.groupby('mgi_symbol').mean().merge(index_generator.reset_index(), how:'inner', left_index:True, right_on:'mgi_symbol').drop_duplicates(
+      subset:['entrezgene_id']).set_index(['entrezgene_id', 'ensembl_gene_id', 'mgi_symbol', 'index_x'])
+}
+let (whole_p0_64403, whole_p4_64403, whole_p7_64403, whole_adult_64403) = list(map(def x {return join_64403(x)}, [whole_p0, whole_p4, whole_p7, whole_adult]))
+
+let p0_p4_d_whole_64403 = multiple_t_tests(whole_p0_64403, whole_p4_64403)
+let p0_p4_d_whole_64403 = p0_p4_d_whole_64403[p0_p4_d_whole_64403 < 0.05]
+let p0_p4_d_whole_64403_sequences = add_sequences(pd.DataFrame(p0_p4_d_whole_64403).join(by_ensembl_gene_id.set_index('ensembl_gene_id')))
+let p0_p4_d_whole_64403_tfs = transcription_factor_analyze(p0_p4_d_whole_64403_sequences, name:'p0_p4_d_whole_64403_tfs')
+
+let p4_p7_d_whole_64403 = multiple_t_tests(whole_p4_64403, whole_p7_64403)
+let p4_p7_d_whole_64403 = p4_p7_d_whole_64403[p4_p7_d_whole_64403 < 0.05]
+let p4_p7_d_whole_64403_sequences = add_sequences(pd.DataFrame(p4_p7_d_whole_64403).join(by_ensembl_gene_id.set_index('ensembl_gene_id')))
+let p4_p7_d_whole_64403_tfs = transcription_factor_analyze(p4_p7_d_whole_64403_sequences, name:'p4_p7_d_whole_64403_tfs')
+
+let p7_adult_d_whole_64403 = multiple_t_tests(whole_p7_64403, whole_adult_64403)
+let p7_adult_d_whole_64403 = p7_adult_d_whole_64403[p7_adult_d_whole_64403 < 0.05]
+let p7_adult_d_whole_64403_sequences = add_sequences(pd.DataFrame(p7_adult_d_whole_64403).join(by_ensembl_gene_id.set_index('ensembl_gene_id')))
+let p7_adult_d_whole_64403_tfs = transcription_factor_analyze(p7_adult_d_whole_64403_sequences, name:'p7_adult_d_whole_64403_tfs')
+
+def join_95755(x) {
+  let index_generator = pd.DataFrame(x.index.to_series()).rename(columns: ('Ensembl_ID':'index_x')).reset_index()
+  let index_generator = index_generator.merge(by_ensembl_gene_id.reset_index(drop:True), how:'inner', left_on : 'index_x', right_on : 'ensembl_gene_id')[
+    ['entrezgene_id', 'ensembl_gene_id', 'mgi_symbol', 'index_x']
+  ]
+  index_generator.set_index('index_x', inplace:True)
+  let x = x.merge(index_generator, left_index:True, right_index:True)
+  x.dropna(subset:['mgi_symbol'])
+  let x = x.set_index(['entrezgene_id', 'ensembl_gene_id', 'mgi_symbol'], append: True)
+  return x.groupby('mgi_symbol').mean().merge(index_generator.reset_index(), how:'inner', left_index:True, right_on:'mgi_symbol').drop_duplicates(
+    subset:['entrezgene_id']).set_index(['entrezgene_id', 'ensembl_gene_id', 'mgi_symbol', 'index_x'])
+}
+
+let (sham_p1_myo_95755, sham_p1_fibro_95755, sham_p1_cd45_95755, sham_p1_cd31_95755,
+  sham_p56_myo_95755, sham_p56_fibro_95755, sham_p56_cd45_95755, sham_p56_cd31_95755)  = list(map(def x {return join_95755(x)}, [sham_p1_myo, sham_p1_fibro, sham_p1_cd45, sham_p1_cd31,
+    sham_p56_myo, sham_p56_fibro, sham_p56_cd45, sham_p56_cd31]))
+
+let sham_p1_d_p56_myo_95755 = multiple_t_tests(sham_p1_myo_95755, sham_p56_myo_95755)
+let sham_p1_d_p56_myo_95755 = sham_p1_d_p56_myo_95755[sham_p1_d_p56_myo_95755 < 0.05]
+let sham_p1_d_p56_myo_95755_sequences = add_sequences(pd.DataFrame(sham_p1_d_p56_myo_95755).join(by_ensembl_gene_id))
+let sham_p1_d_p56_myo_95755_tfs = transcription_factor_analyze(sham_p1_d_p56_myo_95755_sequences)
+
+
+#add_64403 add_to_gene_table(isolated_p0, type:'ensembl_gene_id')

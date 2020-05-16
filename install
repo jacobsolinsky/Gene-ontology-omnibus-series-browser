@@ -1,0 +1,5 @@
+pip install flask
+pip install simplejson
+pip install pandas
+pip install numpy
+pip install seaborn>=0.9
