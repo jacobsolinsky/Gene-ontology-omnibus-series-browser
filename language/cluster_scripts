@@ -1,0 +1,47 @@
+
+
+
+
+
+
+let pd = import pandas
+let np = import numpy
+GeneTable.table['entrezgene_id'] = pd.to_numeric(GeneTable.table['entrezgene_id'], errors:'coerce').fillna(0).astype(np.int64).astype(str)
+let by_entrezgene_id = get_best_tss(GeneTable.table.reset_index(), groupby:'entrezgene_id')
+let by_ensembl_gene_id = get_best_tss(GeneTable.table.reset_index(), groupby:'ensembl_gene_id')
+let by_mgi_symbol = get_best_tss(GeneTable.table.reset_index(), groupby:'mgi_symbol')
+
+
+def join_64403(x){
+    let index_generator = pd.DataFrame(x.index.to_series()).rename(columns: ('Gene':'index_x')).reset_index()
+    let index_generator = index_generator.merge(by_ensembl_gene_id.reset_index(drop:True), how:'inner', left_on : 'index_x', right_on : 'ensembl_gene_id')[
+      ['entrezgene_id', 'ensembl_gene_id', 'mgi_symbol', 'index_x']
+    ]
+    index_generator.set_index('index_x', inplace:True)
+    let x = x.merge(index_generator, left_index:True, right_index:True)
+    x.dropna(subset:['mgi_symbol'])
+    let x = x.set_index(['entrezgene_id', 'ensembl_gene_id', 'mgi_symbol'], append: True)
+    return x.groupby('mgi_symbol').mean().merge(index_generator.reset_index(), how:'inner', left_index:True, right_on:'mgi_symbol').drop_duplicates(
+      subset:['entrezgene_id']).set_index(['entrezgene_id', 'ensembl_gene_id', 'mgi_symbol', 'index_x'])
+}
+let (whole_p0_64403, whole_p4_64403, whole_p7_64403, whole_adult_64403) = list(map(def x {return join_64403(x)}, [whole_p0, whole_p4, whole_p7, whole_adult]))
+
+let whole = pd.concat([whole_p0_64403.mean(axis:1), whole_p4_64403.mean(axis:1), whole_p7_64403.mean(axis:1), whole_adult_64403.mean(axis:1)], axis:1)
+let whole = whole.loc[whole.sum(axis:1)>0]
+let whole = whole / whole.values.sum(axis:1, keepdims:True)
+let whole = whole.dropna()
+let KMeans = (import sklearn.cluster).KMeans
+let km = KMeans(n_clusters:8).fit(whole)
+
+import matplotlib; matplotlib.use('Agg'); let plt = matplotlib.pyplot
+for let ii = range(0, 8){
+  let saveplot = plt.figure()
+  let group = whole.loc[km.labels_ == ii].values
+  for let row = group {
+  plt.plot(['P0', 'P4', 'P7', 'Adult'], row)
+  }
+  plt.xlabel('Age')
+  plt.ylabel('Adjusted Expression')
+  saveplot.savefig('group' + str(ii) + '.png', format:'png')
+  whole.loc[km.labels_ == ii].index.get_level_values('mgi_symbol').write_csv('group_symbols' + str(ii) + '.txt')
+}

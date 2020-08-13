@@ -831,54 +831,90 @@ class BooleanNotNode(LeftUnaryNode):
         self.rc.eval(context)
         context.push(not context.pop())
 
-class IsNode(BinaryNode):
+class ComparisonNode(BinaryNode):
     precedence = "comparison"
+    def eval(self, context, ispassdown_r = False, passdown_r = None):
+        if isinstance(self.lc, ComparisonNode):
+            self.lc.rc.eval(context)
+            l = context.pop()
+            self.lc.eval(context, True, l)
+            truth = context.pop()
+            if ispassdown_r:
+                r = passdown_r
+            else:
+                self.rc.eval(context)
+                r = context.pop()
+            context.push(self.operation(l, r) and truth)
+        else:
+            self.lc.eval(context)
+            l = context.pop()
+            self.rc.eval(context)
+            r = context.pop()
+            context.push(self.operation(l, r))
+
+
+class IsNode(ComparisonNode):
     operation = operator.is_
 
-class IsNotNode(BinaryNode):
-    precedence = "comparison"
+class IsNotNode(ComparisonNode):
     operation = operator.is_not
 
-class InNode(BinaryNode):
-    precedence = "comparison"
-    def eval(self, context):
-        self.lc.eval(context)
-        self.rc.eval(context)
-        r = context.pop()
-        l = context.pop()
-        context.push(l in r)
+class InNode(ComparisonNode):
+    def eval(self, context, ispassdown_r = False, passdown_r = None):
+        if isinstance(self.lc, ComparisonNode):
+            self.lc.rc.eval(context)
+            l = context.pop()
+            self.lc.eval(context, True, l)
+            truth = context.pop()
+            if ispassdown_r:
+                r = passdown_r
+            else:
+                self.rc.eval(context)
+                r = context.pop()
+            context.push((l in r) and truth)
+        else:
+            self.lc.eval(context)
+            l = context.pop()
+            self.rc.eval(context)
+            r = context.pop()
+            context.push(l in r)
 
-class NotInNode(BinaryNode):
-    precedence = "comparison"
-    def eval(self, context):
-        self.lc.eval(context)
-        self.rc.eval(context)
-        r = context.pop()
-        l = context.pop()
-        context.push(l not in r)
+class NotInNode(ComparisonNode):
+    def eval(self, context, ispassdown_r = False, passdown_r = None):
+        if isinstance(self.lc, ComparisonNode):
+            self.lc.rc.eval(context)
+            l = context.pop()
+            self.lc.eval(context, True, l)
+            truth = context.pop()
+            if ispassdown_r:
+                r = passdown_r
+            else:
+                self.rc.eval(context)
+                r = context.pop()
+            context.push((l not in r) and truth)
+        else:
+            self.lc.eval(context)
+            l = context.pop()
+            self.rc.eval(context)
+            r = context.pop()
+            context.push(l not in r)
 
-class EqualsNode(BinaryNode):
-    precedence = "comparison"
+class EqualsNode(ComparisonNode):
     operation = operator.eq
 
-class NotEqualsNode(BinaryNode):
-    precedence = "comparison"
+class NotEqualsNode(ComparisonNode):
     operation = operator.ne
 
-class GtNode(BinaryNode):
-    precedence = "comparison"
+class GtNode(ComparisonNode):
     operation = operator.gt
 
-class GeNode(BinaryNode):
-    precedence = "comparison"
+class GeNode(ComparisonNode):
     operation = operator.ge
 
-class LtNode(BinaryNode):
-    precedence = "comparison"
+class LtNode(ComparisonNode):
     operation = operator.lt
 
-class LeNode(BinaryNode):
-    precedence = "comparison"
+class LeNode(ComparisonNode):
     operation = operator.le
 
 class BitwiseOrNode(BinaryNode):
@@ -908,7 +944,15 @@ class ShiftRightNode(BinaryNode):
 class ImportNode(LeftUnaryNode):
     precedence = "from"
     def eval(self, context):
-        name = self.rc.lexeme.word
+        if type(self.rc) == DotNode:
+            opand = self.rc.lc
+            name = '.' + self.rc.rc.lexeme.word
+            while type(opand) == DotNode:
+                name = '.' + opand.rc.lexeme.word + name
+                opand = opand.lc
+            name = opand.lexeme.word + name
+        else:
+            name = self.rc.lexeme.word
         context.push(importlib.import_module(name))
         context.add_const(name, context.stack[-1])
 
